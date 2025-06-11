@@ -19,41 +19,55 @@ client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
   if (message.content.toLowerCase() === '!mbti') {
-    userProgress.set(message.author.id, { index: 0, counts: { IE: 0, SN: 0, TF: 0, JP: 0 } });
-    await message.author.send("Let's begin your MBTI test! Reply with 1 or 2 to answer.");
+    userProgress.set(message.author.id, { 
+      index: 0, 
+      counts: { IE: 0, SN: 0, TF: 0, JP: 0 },
+      channelId: message.channel.id 
+    });
+    await message.reply("Let's begin your MBTI test! Reply with 1 or 2 to answer.");
     askNextQuestion(message.author.id);
   }
 
-  if (message.channel.type === 1 && userProgress.has(message.author.id)) {
+  // Check if user is taking the test
+  if (userProgress.has(message.author.id)) {
     const progress = userProgress.get(message.author.id);
-    const question = questionBank[progress.index - 1];
-    const answer = message.content.trim();
+    
+    // Only process answers in the same channel where the test started
+    if (message.channel.id === progress.channelId) {
+      // If this is an answer to a question
+      if (progress.index > 0) {
+        const question = questionBank[progress.index - 1];
+        const answer = message.content.trim();
 
-    if (answer === '1' || answer === '2') {
-      const choice = question.options[parseInt(answer) - 1];
-      progress.counts[choice.dimension] += (choice.direction === choice.dimension[1] ? 1 : -1);
-    } else {
-      await message.channel.send("Please reply with `1` or `2`.");
-      return;
-    }
+        if (answer === '1' || answer === '2') {
+          const choice = question.options[parseInt(answer) - 1];
+          progress.counts[choice.dimension] += (choice.direction === choice.dimension[1] ? 1 : -1);
+        } else {
+          await message.reply("Please reply with `1` or `2`.");
+          return;
+        }
 
-    if (progress.index < questionBank.length) {
-      askNextQuestion(message.author.id);
-    } else {
-      const result = getMBTI(progress.counts);
-      await message.channel.send(`✅ All done! Your MBTI type is: **${result}**`);
-      userProgress.delete(message.author.id);
+        if (progress.index < questionBank.length) {
+          askNextQuestion(message.author.id);
+        } else {
+          const result = getMBTI(progress.counts);
+          await message.reply(`✅ All done! Your MBTI type is: **${result}**`);
+          userProgress.delete(message.author.id);
+        }
+      }
     }
   }
 });
 
 function askNextQuestion(userId) {
-  const user = client.users.cache.get(userId);
   const progress = userProgress.get(userId);
   const question = questionBank[progress.index];
   progress.index++;
 
-  user.send(`**Q${progress.index}: ${question.question}**\n1️⃣ ${question.options[0].text}\n2️⃣ ${question.options[1].text}`);
+  const channel = client.channels.cache.get(progress.channelId);
+  const user = client.users.cache.get(userId);
+  
+  channel.send(`<@${userId}> **Q${progress.index}: ${question.question}**\n1️⃣ ${question.options[0].text}\n2️⃣ ${question.options[1].text}`);
 }
 
 function getMBTI(counts) {
